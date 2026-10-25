@@ -1,3 +1,4 @@
+using Seminar_5.Enums;
 using Seminar_5.Models;
 using Seminar_5.Seeders;
 
@@ -157,13 +158,13 @@ namespace Seminar_5
             }
 
             // Min amount (only if the text is a number)
-            if (decimal.TryParse(txtMinAmount.Text, out decimal min))
+            if (double.TryParse(txtMinAmount.Text, out double min))
             {
                 invoices = invoices.Where(i => i.TotalAmount >= min).ToList();
             }
 
             // Max amount
-            if (decimal.TryParse(txtMaxAmount.Text, out decimal max))
+            if (double.TryParse(txtMaxAmount.Text, out double max))
             {
                 invoices = invoices.Where(i => i.TotalAmount <= max).ToList();
             }
@@ -220,8 +221,8 @@ namespace Seminar_5
         // =====================================================
 
         // NOTE: we first load the tables into lists with .ToList().
-        // Then LINQ runs in memory. This is needed because SQLite
-        // cannot Sum/OrderBy decimal values and EF Core cannot translate GroupJoin.
+        // Then LINQ runs in memory. This is needed because
+        // EF Core cannot translate GroupJoin into SQL (it would crash).
 
         // 8a) Invoice with client information
         private void btnInvoiceClientInfo_Click(object sender, EventArgs e)
@@ -393,7 +394,7 @@ namespace Seminar_5
         }
 
         // Helper: how much has been paid for one invoice
-        private decimal GetAmountPaid(List<Payment> payments, string invoiceNumber)
+        private double GetAmountPaid(List<Payment> payments, string invoiceNumber)
         {
             return payments
                 .Where(p => p.InvoiceNumber == invoiceNumber)

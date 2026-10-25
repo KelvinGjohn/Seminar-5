@@ -6,18 +6,19 @@ namespace Seminar_5.Models
     {
         [Key]
         public string InvoiceNumber { get; set; }   // 3b) "VEA_XXXXX_XXXXXX"
-
+        public string Title { get; set; }
         public int ClientId { get; set; }            // FK -> Client
         public Client Client { get; set; }
-
-        public string Title { get; set; }
-        public decimal TotalAmount { get; set; }
+        public double TotalAmount { get; set; }
         public DateTime DueDate { get; set; }
 
         // One invoice has many payments
         public List<Payment> Payments { get; set; }
 
-        public Invoice(string invoiceNumber, int clientId, string title, decimal totalAmount, DateTime dueDate)
+        public Invoice() { }
+
+        // Put the values straight into the PROPERTIES (not into extra private fields)
+        public Invoice(string invoiceNumber, int clientId, string title, double totalAmount, DateTime dueDate)
         {
             InvoiceNumber = invoiceNumber;
             ClientId = clientId;

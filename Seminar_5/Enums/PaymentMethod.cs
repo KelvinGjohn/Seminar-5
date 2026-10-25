@@ -1,4 +1,4 @@
-namespace Seminar_5.Models
+namespace Seminar_5.Enums
 {
     // 3c) Payment Method is defined as an Enum
     public enum PaymentMethod

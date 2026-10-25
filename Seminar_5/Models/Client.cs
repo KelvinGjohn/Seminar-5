@@ -11,6 +11,8 @@ namespace Seminar_5.Models
         // One client has many invoices
         public List<Invoice> Invoices { get; set; }
 
+        public Client() { }
+
         public Client(string name, string address, string phoneNumber, string bankAddress)
         {
             Name = name;
