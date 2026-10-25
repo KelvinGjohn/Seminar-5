@@ -219,24 +219,185 @@ namespace Seminar_5
         // 8) LINQ query buttons
         // =====================================================
 
+        // NOTE: we first load the tables into lists with .ToList().
+        // Then LINQ runs in memory. This is needed because SQLite
+        // cannot Sum/OrderBy decimal values and EF Core cannot translate GroupJoin.
+
+        // 8a) Invoice with client information
         private void btnInvoiceClientInfo_Click(object sender, EventArgs e)
         {
+            AppDbContext db = new AppDbContext();
+            var invoices = db.Invoices.ToList();
+            var clients = db.Clients.ToList();
+
+            var result = invoices
+                .Join(clients,
+                    i => i.ClientId,
+                    cl => cl.Id,
+                    (i, cl) => new
+                    {
+                        i.InvoiceNumber,
+                        ClientName = cl.Name,
+                        i.TotalAmount,
+                        i.DueDate
+                    }
+                )
+                .Where(o => o.TotalAmount > 100)
+                .OrderByDescending(o => o.TotalAmount)
+                .ToList();
+
+            dataGridView.DataSource = result;
         }
 
+        // 8b) Unpaid invoices
         private void btnNotPaidInvoices_Click(object sender, EventArgs e)
         {
+            AppDbContext db = new AppDbContext();
+            var invoices = db.Invoices.ToList();
+            var payments = db.Payments.ToList();
+
+            var result = invoices
+                .GroupJoin(payments,
+                    i => i.InvoiceNumber,
+                    p => p.InvoiceNumber,
+                    (i, ps) => new
+                    {
+                        i.InvoiceNumber,
+                        TotalAmount = i.TotalAmount,
+                        AmountPaid = ps.Sum(p => p.Amount),
+                        Balance = i.TotalAmount - ps.Sum(p => p.Amount)
+                    }
+                )
+                .Where(o => o.Balance > 0)
+                .OrderByDescending(o => o.Balance)
+                .ToList();
+
+            dataGridView.DataSource = result;
         }
 
+        // 8c) Client financial statistics
         private void btnClientFinancialStatistics_Click(object sender, EventArgs e)
         {
+            AppDbContext db = new AppDbContext();
+            var invoices = db.Invoices.ToList();
+            var clients = db.Clients.ToList();
+            var payments = db.Payments.ToList();
+
+            var result = clients
+                .GroupJoin(invoices,
+                    cl => cl.Id,
+                    i => i.ClientId,
+                    (cl, invs) => new
+                    {
+                        ClientName = cl.Name,
+                        InvoiceCount = invs.Count(),
+                        TotalDue = invs.Sum(i => i.TotalAmount),
+                        TotalPaid = invs.Sum(i => GetAmountPaid(payments, i.InvoiceNumber))
+                    }
+                )
+                .Select(o => new
+                {
+                    o.ClientName,
+                    o.InvoiceCount,
+                    o.TotalDue,
+                    o.TotalPaid,
+                    Balance = o.TotalDue - o.TotalPaid
+                })
+                .OrderByDescending(o => o.Balance)
+                .ToList();
+
+            dataGridView.DataSource = result;
         }
 
+        // 8d) Overdue invoices
         private void btnOverdueInvoices_Click(object sender, EventArgs e)
         {
+            AppDbContext db = new AppDbContext();
+            var invoices = db.Invoices.ToList();
+            var clients = db.Clients.ToList();
+            var payments = db.Payments.ToList();
+
+            var result = invoices
+                .Where(i => i.DueDate < DateTime.Now)          // overdue = due date already passed
+                .Join(clients,
+                    i => i.ClientId,
+                    cl => cl.Id,
+                    (i, cl) => new
+                    {
+                        ClientName = cl.Name,
+                        i.InvoiceNumber,
+                        DaysOverdue = (DateTime.Now - i.DueDate).Days,
+                        AmountPaid = GetAmountPaid(payments, i.InvoiceNumber),
+                        Balance = i.TotalAmount - GetAmountPaid(payments, i.InvoiceNumber)
+                    }
+                )
+                .Where(o => o.Balance > 0)                     // exclude fully paid invoices
+                .Select(o => new
+                {
+                    o.ClientName,
+                    o.InvoiceNumber,
+                    o.DaysOverdue,
+                    o.Balance,
+                    PaymentStatus = o.AmountPaid == 0 ? "Unpaid" : "Partially paid"
+                })
+                .OrderByDescending(o => o.DaysOverdue)
+                .ToList();
+
+            dataGridView.DataSource = result;
         }
 
+        // 8e) Top 3 clients
         private void btnTop3Clients_Click(object sender, EventArgs e)
         {
+            AppDbContext db = new AppDbContext();
+            var invoices = db.Invoices.ToList();
+            var clients = db.Clients.ToList();
+            var payments = db.Payments.ToList();
+
+            var result = clients
+                .GroupJoin(invoices,
+                    cl => cl.Id,
+                    i => i.ClientId,
+                    (cl, invs) => new
+                    {
+                        ClientName = cl.Name,
+                        InvoiceCount = invs.Count(),
+                        TotalInvoiceAmount = invs.Sum(i => i.TotalAmount),
+
+                        // overdue = due date passed AND not fully paid
+                        OverdueInvoiceCount = invs.Count(i =>
+                            i.DueDate < DateTime.Now &&
+                            i.TotalAmount - GetAmountPaid(payments, i.InvoiceNumber) > 0),
+
+                        // biggest invoice that is not fully paid
+                        LargestUnpaid = invs
+                            .Where(i => i.TotalAmount - GetAmountPaid(payments, i.InvoiceNumber) > 0)
+                            .OrderByDescending(i => i.TotalAmount)
+                            .FirstOrDefault()
+                    }
+                )
+                .OrderByDescending(o => o.TotalInvoiceAmount)
+                .Take(3)
+                .Select(o => new
+                {
+                    o.ClientName,
+                    o.InvoiceCount,
+                    o.TotalInvoiceAmount,
+                    o.OverdueInvoiceCount,
+                    LargestUnpaidInvoice = o.LargestUnpaid == null ? "-" : o.LargestUnpaid.InvoiceNumber,
+                    LargestUnpaidAmount = o.LargestUnpaid == null ? 0 : o.LargestUnpaid.TotalAmount
+                })
+                .ToList();
+
+            dataGridView.DataSource = result;
+        }
+
+        // Helper: how much has been paid for one invoice
+        private decimal GetAmountPaid(List<Payment> payments, string invoiceNumber)
+        {
+            return payments
+                .Where(p => p.InvoiceNumber == invoiceNumber)
+                .Sum(p => p.Amount);
         }
     }
 }
